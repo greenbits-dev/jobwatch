@@ -1,0 +1,4 @@
+jobs.json
+cache.json
+__pycache__/
+*.log

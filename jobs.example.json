@@ -1,0 +1,107 @@
+{
+  "_comment": [
+    "Example registry. Copy to jobs.json (gitignored) and replace these with your own jobs.",
+    "A job that is not listed here is invisible to the checker, so registering a job is",
+    "part of shipping it. Every entry needs a `fix`: what a human does about a finding,",
+    "as a command they can paste. The loader rejects an entry without one."
+  ],
+  "jobs": [
+    {
+      "id": "nightly-backup",
+      "audience": "me",
+      "what": "Snapshots the notes folder to the backup bucket",
+      "trigger": "launchd com.example.nightly-backup, StartCalendarInterval 02:30",
+      "every": "24h",
+      "grace": "6h",
+      "proof": "a `nightly-backup done rc=0` trailer, with at least one `uploaded` line in the same run",
+      "notices": "Me: no backup for over a day",
+      "fix": "tail -50 ~/.local/state/nightly-backup.log && launchctl kickstart -k gui/$(id -u)/com.example.nightly-backup",
+      "check": {
+        "kind": "log_block",
+        "path": "~/.local/state/nightly-backup.log",
+        "launchd": "com.example.nightly-backup",
+        "start": "^=== (?P<ts>\\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2}) nightly-backup start ===",
+        "done": "^=== \\d{4}-\\d{2}-\\d{2} \\d{2}:\\d{2}:\\d{2} nightly-backup done rc=0 ===",
+        "fail_if": "^\\s*ERROR ",
+        "expect": "^\\s*uploaded \\S+",
+        "expect_what": "uploading a single file"
+      }
+    },
+    {
+      "id": "inbox-reader-state",
+      "audience": "me",
+      "what": "A polling reader that rewrites its state file on every pass",
+      "trigger": "a long-running agent session, every 15 minutes",
+      "every": "1h",
+      "grace": "2h",
+      "proof": "the state file's mtime",
+      "notices": "Me: the reader stopped polling",
+      "fix": "restart the reader session, then check its last error in the session log",
+      "check": {
+        "kind": "mtime",
+        "path": "~/.local/state/inbox-reader.json"
+      }
+    },
+    {
+      "id": "ci-main",
+      "audience": "team",
+      "what": "CI for the main repo",
+      "trigger": "GitHub Actions on push to main and pull_request, no interval",
+      "every": null,
+      "proof": "the workflow is active and its last completed run succeeded",
+      "notices": "Whoever is on call this week: main is red",
+      "fix": "cd ~/code/main-repo && gh run list --workflow ci.yml --limit 3 && gh run view <id> --log-failed",
+      "check": {
+        "kind": "github_workflow",
+        "repo": "~/code/main-repo",
+        "workflow": "ci.yml"
+      }
+    },
+    {
+      "id": "app-hourly-sync",
+      "audience": "team",
+      "what": "Hourly Vercel cron that syncs the app's content",
+      "trigger": "vercel.json crons: /api/cron/sync, 0 * * * *",
+      "every": null,
+      "proof": "the cron is enabled on the live deployment with the expected schedule, and the app answers",
+      "notices": "Whoever owns the app: the cron is off, edited or unreachable",
+      "fix": "vercel inspect --logs <deployment>; check Settings > Cron Jobs on the project",
+      "check": {
+        "kind": "vercel_cron",
+        "team": "example-team",
+        "project": "example-app",
+        "path": "/api/cron/sync",
+        "schedule": "0 * * * *",
+        "reachable": "https://example.com/"
+      }
+    },
+    {
+      "id": "morning-wake",
+      "audience": "me",
+      "what": "The scheduled wake that the 07:15-08:00 launchd jobs depend on to run awake",
+      "trigger": "sudo pmset repeat wakeorpoweron MTWRFSU 07:10:00",
+      "every": null,
+      "proof": "`pmset -g sched` still shows a repeating wake at 07:10. macOS keeps exactly one repeat schedule, and an OS update can clear it without saying so.",
+      "notices": "Me: the morning jobs will start in a DarkWake and fail with misleading errors",
+      "fix": "sudo pmset repeat wakeorpoweron MTWRFSU 07:10:00",
+      "check": {
+        "kind": "pmset_repeat",
+        "at": "7:10AM",
+        "days": "every day"
+      }
+    },
+    {
+      "id": "watch-self",
+      "audience": "me",
+      "what": "The checker's own entry: every other job must be evaluable",
+      "trigger": "on demand, from whatever surface runs `jobwatch.py check`",
+      "every": null,
+      "proof": "no other job came back `unknown`. A log that moved, a renamed workflow or a CLI that lost its auth turns a real check into `unknown` while the surface stays quiet, which reads as universal health.",
+      "notices": "Me: a partly blind checker looks like a working one",
+      "fix": "python3 jobwatch.py list, then fix the registry entry for each `unknown` row",
+      "check": {
+        "kind": "self"
+      }
+    }
+  ]
+}
